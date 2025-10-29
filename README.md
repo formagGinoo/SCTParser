@@ -19,3 +19,7 @@ Usage: SCTParser <input_path> <output_path> [--verbose]
   --verbose / --v: Optional flag for detailed output
 ```
 
+### Info
+
+Use [Chaos Zero Nightmare ASSet Ripper](https://github.com/akioukun/Chaos-Zero-Nightmare-ASSet-Ripper) to extract all the assets from `data.pack`
+
