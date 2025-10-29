@@ -1,4 +1,8 @@
-﻿namespace SCTParser;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Threading.Tasks;
+
+namespace SCTParser;
 
 class Program
 {
@@ -7,9 +11,9 @@ class Program
         if (args.Length < 2)
         {
             Console.WriteLine("Usage: SCTParser <input_path> <output_path> [--verbose]");
-            Console.WriteLine("  input_path: File or directory to process");
-            Console.WriteLine("  output_path: Output directory for PNG files");
-            Console.WriteLine("  --verbose / --v: Optional flag for detailed output");
+            Console.WriteLine("  <input_path>   File or directory to process (.sct / .sct2)");
+            Console.WriteLine("  <output_path>  Output directory for PNG files");
+            Console.WriteLine("  --verbose | --v  Optional: show detailed log output");
             return;
         }
 
@@ -17,88 +21,96 @@ class Program
         string outputPath = args[1];
         bool verbose = args.Length > 2 && (args[2] == "--verbose" || args[2] == "--v");
 
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
-            // Create output directory if it doesn't exist
             Directory.CreateDirectory(outputPath);
 
             if (File.Exists(inputPath))
             {
-                // Process single file
                 ProcessFile(inputPath, outputPath, verbose);
             }
             else if (Directory.Exists(inputPath))
             {
-                // Process directory
                 ProcessDirectory(inputPath, outputPath, verbose);
             }
             else
             {
                 Console.WriteLine($"Error: Input path '{inputPath}' does not exist");
+                return;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
-            if (args.Any(arg => arg == "--verbose"))
-            {
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
-            }
+            Console.WriteLine($"Fatal error: {ex.Message}");
+            if (verbose)
+                Console.WriteLine(ex.StackTrace);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            Console.WriteLine();
+            Console.WriteLine($"Done. Elapsed time: {stopwatch.Elapsed.TotalSeconds:F2} seconds");
         }
     }
+	
+    static readonly ConcurrentDictionary<string, bool> createdDirs = new();
 
     static void ProcessDirectory(string inputDir, string outputDir, bool verbose)
     {
-        // Process all files in current directory
-        foreach (string file in Directory.GetFiles(inputDir))
-        {
-            if (Path.GetExtension(file).ToLower() is ".sct" or ".sct2")
-            {
-                ProcessFile(file, outputDir, verbose);
-            }
-        }
+        var files = Directory.GetFiles(inputDir, "*.*", SearchOption.AllDirectories)
+                             .Where(f => Path.GetExtension(f).ToLower() is ".sct" or ".sct2");
 
-        // Process all subdirectories
-        foreach (string dir in Directory.GetDirectories(inputDir))
+        Parallel.ForEach(files, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, file =>
         {
-            string dirName = Path.GetFileName(dir);
-            string newOutputDir = Path.Combine(outputDir, dirName);
-            Directory.CreateDirectory(newOutputDir);
-            ProcessDirectory(dir, newOutputDir, verbose);
-        }
+            try
+            {
+                string relativePath = Path.GetRelativePath(inputDir, Path.GetDirectoryName(file)!);
+                string outputSubdir = Path.Combine(outputDir, relativePath);
+
+                if (createdDirs.TryAdd(outputSubdir, true))
+                    Directory.CreateDirectory(outputSubdir);
+
+                ProcessFile(file, outputSubdir, verbose);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\nError processing {file}: {ex.Message}");
+                if (verbose)
+                    Console.WriteLine(ex.StackTrace);
+            }
+        });
     }
 
     static void ProcessFile(string inputFile, string outputDir, bool verbose)
     {
         try
         {
-            if (verbose) Console.WriteLine($"Processing: {inputFile}");
+            if (verbose)
+                Console.WriteLine($"Processing: {inputFile}");
 
-            // Read file
             byte[] data = File.ReadAllBytes(inputFile);
-
-            // Convert to PNG
             byte[]? pngData = SCTParser.convert_to_png(data, verbose);
 
             if (pngData != null)
             {
-                // Create output filename
-                string outputFile = Path.Combine(outputDir, 
-                    Path.GetFileNameWithoutExtension(inputFile) + ".png");
-
-                // Save PNG file
+                string outputFile = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(inputFile) + ".png");
                 File.WriteAllBytes(outputFile, pngData);
 
-                Console.WriteLine($"Saved: {outputFile}");
+                if (verbose)
+                    Console.WriteLine($"Saved: {outputFile}");
             }
             else
             {
-                Console.WriteLine($"Failed to convert: {inputFile}");
+                Console.WriteLine($"\nFailed to convert: {inputFile}");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error processing {inputFile}: {ex.Message}");
+            Console.WriteLine($"\nError processing {inputFile}: {ex.Message}");
+            if (verbose)
+                Console.WriteLine(ex.StackTrace);
         }
     }
 }
