@@ -8,7 +8,7 @@ The program should support both SCT and SCT2 versions of the format.
 
 <hr>
 
-⚠️ **This project is preatty much a mess, it works but the code is... 😭 totally vibe coded and not optimal. If you would like to refactor the code feel free to open a pull request, for any issues open a issue ticket.**
+⚠️ **This project is pretty much a mess, it works but the code is... 😭 totally vibe coded and not optimal. If you would like to refactor the code feel free to open a pull request, for any issues open an issue ticket.**
 
 ### Usage
 
@@ -22,4 +22,5 @@ Usage: SCTParser <input_path> <output_path> [--verbose]
 ### Info
 
 Use [Chaos Zero Nightmare ASSet Ripper](https://github.com/akioukun/Chaos-Zero-Nightmare-ASSet-Ripper) to extract all the assets from `data.pack`
+
 
