@@ -1,5 +1,8 @@
 # SCTParser
 
+> [!IMPORTANT]
+> This project is now implemented in [Chaos Zero Nightmare ASSet Ripper](https://github.com/akioukun/Chaos-Zero-Nightmare-ASSet-Ripper). For a better and complete user experience i recommend using that tool
+
 ### What is this
 
 This is a small program that is able to **parse** the custom images format (**.sct**) used in games made with **Yuna Engine (SuperCreative engine)** like *Chaos Zero Nightmare (tested)* and *Epic Seven (not tested)*.
@@ -22,5 +25,6 @@ Usage: SCTParser <input_path> <output_path> [--verbose]
 ### Info
 
 Use [Chaos Zero Nightmare ASSet Ripper](https://github.com/akioukun/Chaos-Zero-Nightmare-ASSet-Ripper) to extract all the assets from `data.pack`
+
 
 
