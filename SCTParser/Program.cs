@@ -8,18 +8,74 @@ class Program
 {
     static void Main(string[] args)
     {
-        if (args.Length < 2)
+        string? inputPath = null;
+        string? outputPath = null;
+        bool verbose = false;
+
+        for (int i = 0; i < args.Length; i++) 
+        {
+            string a = args[i];
+
+            if (a == "--verbose" || a == "--v" || a == "-v") 
+            {
+                verbose = true;
+                continue;
+            }
+
+            if (a == "-o" || a == "--out") 
+            {
+                if (i + 1 >= args.Length) 
+                {
+                    Console.WriteLine("Error: -o/--out requires a path.");
+                    return;
+                }
+                outputPath = args[++i];
+                continue;
+            }
+
+            if (a.StartsWith("--out=")) 
+            {
+                outputPath = a.Substring("--out=".Length);
+                continue;
+            }
+
+            // positional
+            if (inputPath == null) inputPath = a;
+            else if (outputPath == null) outputPath = a;
+            else 
+            {
+                Console.WriteLine($"Error: Unexpected argument '{a}'.");
+                return;
+            }
+        }
+
+        if (inputPath == null) 
         {
             Console.WriteLine("Usage: SCTParser <input_path> <output_path> [--verbose]");
-            Console.WriteLine("  <input_path>   File or directory to process (.sct / .sct2)");
-            Console.WriteLine("  <output_path>  Output directory for PNG files");
+            Console.WriteLine("  <input_path>     File or directory to process (.sct / .sct2)");
+            Console.WriteLine("  [output_path]    Optional: output directory for PNG files (defaults to input directory)");
+            Console.WriteLine("  -o, --out        Optional: explicit output directory");
             Console.WriteLine("  --verbose | --v  Optional: show detailed log output");
             return;
         }
 
-        string inputPath = args[0];
-        string outputPath = args[1];
-        bool verbose = args.Length > 2 && (args[2] == "--verbose" || args[2] == "--v");
+        if (outputPath == null) 
+        {
+            if (File.Exists(inputPath)) 
+            {
+                outputPath = Path.GetDirectoryName(Path.GetFullPath(inputPath))
+                             ?? Directory.GetCurrentDirectory();
+            }
+            else if (Directory.Exists(inputPath)) 
+            {
+                outputPath = inputPath;
+            }
+            else 
+            {
+                Console.WriteLine($"Error: Input path '{inputPath}' does not exist");
+                return;
+            }
+        }
 
         var stopwatch = Stopwatch.StartNew();
 
