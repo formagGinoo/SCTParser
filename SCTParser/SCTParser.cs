@@ -820,7 +820,7 @@ public class SCTParser
                     break;
 
                 case "ASTC_6x6":
-                    if (verbose) Console.WriteLine("Decoding ASTC 8x8...");
+                    if (verbose) Console.WriteLine("Decoding ASTC 6x6...");
                     final_rgba_data = new byte[width * height * 4];
                     TextureDecoder.DecodeASTC(image_data, width, height, 6, 6, final_rgba_data);
                     BGRA_SwapRB(final_rgba_data); // ASTC output expected as BGRA in codebase
