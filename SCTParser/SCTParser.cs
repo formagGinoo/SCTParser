@@ -545,6 +545,7 @@ public class SCTParser
             { 16, ("RGB", 3, "RGB565") },
             { 19, ("RGBA", 4, "ETC2_RGBA8") },  // Pixel format 19 is ETC2 RGBA8
             { 40, ("RGBA", 4, "ASTC_4x4") },    // Format 40 is compressed ASTC 4x4
+            { 44, ("RGBA", 4, "ASTC_6x6") },    // Format 44 is compressed ASTC 6x6
             { 47, ("RGBA", 4, "ASTC_8x8") },    // Format 47 is compressed ASTC 8x8
         };
 
@@ -555,7 +556,7 @@ public class SCTParser
         }
 
         // Compressed formats (41-53) - exclude those with specific decoders
-        var excluded_formats = new[] { 47 };
+        var excluded_formats = new[] { 44, 47 };
         if (format_code >= 41 && format_code <= 53 && !excluded_formats.Contains(format_code))
         {
             return ("RGBA", 4, "COMPRESSED");
@@ -814,6 +815,14 @@ public class SCTParser
                     if (verbose) Console.WriteLine("Decoding ASTC 4x4...");
                     final_rgba_data = new byte[width * height * 4];
                     TextureDecoder.DecodeASTC(image_data, width, height, 4, 4, final_rgba_data);
+                    BGRA_SwapRB(final_rgba_data); // ASTC output expected as BGRA in codebase
+                    has_alpha = true;
+                    break;
+
+                case "ASTC_6x6":
+                    if (verbose) Console.WriteLine("Decoding ASTC 8x8...");
+                    final_rgba_data = new byte[width * height * 4];
+                    TextureDecoder.DecodeASTC(image_data, width, height, 6, 6, final_rgba_data);
                     BGRA_SwapRB(final_rgba_data); // ASTC output expected as BGRA in codebase
                     has_alpha = true;
                     break;
