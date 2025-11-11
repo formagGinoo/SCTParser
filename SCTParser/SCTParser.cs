@@ -547,6 +547,7 @@ public class SCTParser
             { 40, ("RGBA", 4, "ASTC_4x4") },    // Format 40 is compressed ASTC 4x4
             { 44, ("RGBA", 4, "ASTC_6x6") },    // Format 44 is compressed ASTC 6x6
             { 47, ("RGBA", 4, "ASTC_8x8") },    // Format 47 is compressed ASTC 8x8
+            { 102, ("L", 1, "L8") },
         };
 
         // Formats with alpha (17-26) - but exclude 19 and 40 which are special
@@ -834,7 +835,11 @@ public class SCTParser
                     BGRA_SwapRB(final_rgba_data); // ASTC output expected as BGRA in codebase
                     has_alpha = true;
                     break;
-
+                case "L8":
+                    if (verbose) Console.WriteLine("Converting L8 to RGBA...");
+                    final_rgba_data = convert_l8_to_rgba(image_data);
+                    has_alpha = false;
+                    break;
                 default:
                     if (verbose) Console.WriteLine($"Using raw {format_type_str} data");
                     final_rgba_data = image_data;
@@ -902,6 +907,20 @@ public class SCTParser
             rgba[j + 1] = rgb_data[i + 1]; // G
             rgba[j + 2] = rgb_data[i + 2]; // B
             rgba[j + 3] = 255;         // A (opaque)
+        }
+        return rgba;
+    }
+
+    private static byte[] convert_l8_to_rgba(byte[] l8_data)
+    {
+        var rgba = new byte[l8_data.Length * 4];
+        for (int i = 0; i < l8_data.Length; i++)
+        {
+            byte gray = l8_data[i];
+            rgba[i * 4 + 0] = gray;
+            rgba[i * 4 + 1] = gray;
+            rgba[i * 4 + 2] = gray;
+            rgba[i * 4 + 3] = 255;
         }
         return rgba;
     }
