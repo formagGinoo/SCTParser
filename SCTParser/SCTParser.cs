@@ -17,7 +17,7 @@ public class SCTParser
     /// <param name="data">Array of bytes to analyze</param>
     /// <param name="debug">Flag to enable debug messages</param>
     /// <returns>10002 for sct2, 10001 for sct, -1 for unknown format</returns>
-    private static int detect_format(byte[] data, bool debug = false)
+    private static int DetectFormat(byte[] data, bool debug = false)
     {
         if (data.Length < 4)
         {
@@ -59,7 +59,7 @@ public class SCTParser
     /// <param name="data">array of bytes containing the SCT header</param>
     /// <returns>A Dictionary object containing the header parameters</returns>
     /// <exception cref="ArgumentException">Thrown if the file is too small</exception>
-    public static Dictionary<string, object> parse_sct_header(byte[] data)
+    public static Dictionary<string, object> ParseSCTHeader(byte[] data)
     {
         if (data.Length < 9)
             throw new ArgumentException("File too small to contain a valid SCT header");
@@ -105,7 +105,7 @@ public class SCTParser
     /// <param name="data">Array of bytes containing the SCT2 header</param>
     /// <returns>A Dictionary object containing the header parameters</returns>
     /// <exception cref="ArgumentException">Thrown if the file is too small</exception>
-    public static Dictionary<string, object> parse_sct2_header(byte[] data)
+    public static Dictionary<string, object> ParseSCT2Header(byte[] data)
     {
         if (data.Length < 34)
             throw new ArgumentException("File too small to contain a valid SCT2 header");
@@ -161,7 +161,7 @@ public class SCTParser
     /// <param name="compressed_data">Compressed data array</param>
     /// <returns>Decompressed data as byte array</returns>
     /// <exception cref="ArgumentException">Thrown if compressed data is too short</exception>
-    public static byte[] lz4_decompress(byte[] compressed_data)
+    public static byte[] LZ4Decompress(byte[] compressed_data)
     {
         if (compressed_data.Length < 8)
             throw new ArgumentException("Compressed data too short");
@@ -275,7 +275,7 @@ public class SCTParser
     /// <param name="pixel_format">Pixel format code</param>
     /// <param name="verbose">Enable detailed output</param>
     /// <returns>True if data should be decompressed, false otherwise</returns>
-    public static bool should_decompress_intelligently(byte[] image_data, int width, int height, int pixel_format, bool verbose = false)
+    public static bool ShouldDecompressIntelligently(byte[] image_data, int width, int height, int pixel_format, bool verbose = false)
     {
         if (image_data.Length < 8)
             return false;
@@ -308,7 +308,7 @@ public class SCTParser
 
         try
         {
-            decompressed = lz4_decompress(image_data);
+            decompressed = LZ4Decompress(image_data);
             decomp_ratio = (double)decompressed.Length / expected_astc_size;
             lz4_works = decompressed.Length > 0;
         }
@@ -353,7 +353,7 @@ public class SCTParser
     /// </summary>
     /// <param name="data">Array of bytes in RGB565 LE format</param>
     /// <returns>Array of bytes in RGB format</returns>
-    public static byte[] rgb565_le_to_rgb(byte[] data)
+    public static byte[] RGB565LEToRGB(byte[] data)
     {
         List<byte> rgb_data = new List<byte>();
 
@@ -387,7 +387,7 @@ public class SCTParser
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>Decoded RGBA data</returns>
     /// <exception cref="Exception">Thrown when decoding fails</exception>
-    public static byte[] decode_etc2_rgba8(byte[] compressed_data, int width, int height, bool verbose = false)
+    public static byte[] DecodeETC2ToRGBA(byte[] compressed_data, int width, int height, bool verbose = false)
     {
         // Try texture2ddecoder first
         try
@@ -535,7 +535,7 @@ public class SCTParser
     /// </summary>
     /// <param name="format_code">Format code from header</param>
     /// <returns>Tuple containing format name, number of channels, and format type</returns>
-    public static (string Format, int Channels, string Type) get_pixel_format_info(int format_code)
+    public static (string Format, int Channels, string Type) GetPixelFormatInfo(int format_code)
     {
         // Define format mapping dictionary
         var format_map = new Dictionary<int, (string Format, int Channels, string Type)>
@@ -576,15 +576,15 @@ public class SCTParser
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>Dictionary containing parsed header and image data</returns>
     /// <exception cref="ArgumentException">Thrown if file format is invalid</exception>
-    public static Dictionary<string, object> parse_sct_file(byte[] data, bool verbose = false)
+    public static Dictionary<string, object> ParseSCTFile(byte[] data, bool verbose = false)
     {
         // Verify format
-        int format_type = detect_format(data, verbose);
+        int format_type = DetectFormat(data, verbose);
         if (format_type != 10001)
             throw new ArgumentException($"File is not a valid SCT format (detected format: {format_type})");
 
         // Parse header
-        var header = parse_sct_header(data);
+        var header = ParseSCTHeader(data);
 
         if (verbose)
         {
@@ -603,7 +603,7 @@ public class SCTParser
         if (verbose) Console.WriteLine("Decompressing data...");
         try
         {
-            image_data = lz4_decompress(image_data);
+            image_data = LZ4Decompress(image_data);
             if (verbose) Console.WriteLine($"Decompressed: {image_data.Length} bytes");
         }
         catch (Exception e)
@@ -613,7 +613,7 @@ public class SCTParser
         }
 
         // Determine pixel format
-        var (pixel_format_name, channels, format_type_str) = get_pixel_format_info(Convert.ToInt32(header["pixel_format"]));
+        var (pixel_format_name, channels, format_type_str) = GetPixelFormatInfo(Convert.ToInt32(header["pixel_format"]));
 
         // Return all parsed data
         return new Dictionary<string, object>
@@ -633,7 +633,7 @@ public class SCTParser
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>Dictionary containing parsed header and image data</returns>
     /// <exception cref="ArgumentException">Thrown if file format is invalid</exception>
-    private static Dictionary<string, object> parse_sct2_file(byte[] data, bool verbose = false)
+    private static Dictionary<string, object> ParseSCT2File(byte[] data, bool verbose = false)
     {
         // Verify format
         //int format_type = detect_format(data, verbose);
@@ -641,7 +641,7 @@ public class SCTParser
         //throw new ArgumentException($"File is not a valid SCT2 format (detected format: {format_type})");
 
         // Parse header
-        var header = parse_sct2_header(data);
+        var header = ParseSCT2Header(data);
 
         if (verbose)
         {
@@ -670,7 +670,7 @@ public class SCTParser
                 Console.WriteLine($"Flag {flag_name} detected: {image_data.Length} bytes");
 
             // Use intelligent detection to decide if decompression is needed
-            if (should_decompress_intelligently(
+            if (ShouldDecompressIntelligently(
                 image_data,
                 Convert.ToInt32(header["width"]),
                 Convert.ToInt32(header["height"]),
@@ -679,7 +679,7 @@ public class SCTParser
             {
                 try
                 {
-                    decompressed_image_data = lz4_decompress(image_data);
+                    decompressed_image_data = LZ4Decompress(image_data);
                     if (verbose)
                         Console.WriteLine($"LZ4 decompression applied: {decompressed_image_data.Length} bytes");
                 }
@@ -703,7 +703,7 @@ public class SCTParser
             try
             {
                 // Attempt LZ4 decompression
-                decompressed_image_data = lz4_decompress(image_data);
+                decompressed_image_data = LZ4Decompress(image_data);
                 if (verbose)
                     Console.WriteLine($"Decompression successful: {decompressed_image_data.Length} bytes");
             }
@@ -721,7 +721,7 @@ public class SCTParser
             try
             {
                 // Attempt decompression to see if it works
-                decompressed_image_data = lz4_decompress(image_data);
+                decompressed_image_data = LZ4Decompress(image_data);
                 if (verbose)
                     Console.WriteLine($"Decompression successful: {decompressed_image_data.Length} bytes");
             }
@@ -741,7 +741,7 @@ public class SCTParser
         }
 
         // Determine pixel format
-        var (pixel_format_name, channels, format_type_str) = get_pixel_format_info(Convert.ToInt32(header["pixel_format"]));
+        var (pixel_format_name, channels, format_type_str) = GetPixelFormatInfo(Convert.ToInt32(header["pixel_format"]));
 
         // Return all parsed data
         return new Dictionary<string, object>
@@ -761,21 +761,21 @@ public class SCTParser
     /// <param name="data">Raw byte array of the SCT/SCT2 file</param>
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>PNG image data as byte array, or null if conversion fails</returns>
-    public static byte[]? convert_to_png(byte[] data, bool verbose = false)
+    public static byte[]? ConvertToPNG(byte[] data, bool verbose = false)
     {
         try
         {
             // Determine file type
-            int format_type = detect_format(data);
+            int format_type = DetectFormat(data);
             Dictionary<string, object>? result = null;
 
             if (format_type == 10002)  // SCT2
             {
-                result = parse_sct2_file(data, verbose);
+                result = ParseSCT2File(data, verbose);
             }
             else if (format_type == 10001)  // SCT
             {
-                result = parse_sct_file(data, verbose);
+                result = ParseSCTFile(data, verbose);
             }
             else
             {
@@ -802,13 +802,13 @@ public class SCTParser
             {
                 case "RGB565_LE":
                     if (verbose) Console.WriteLine("Decoding RGB565 Little Endian...");
-                    var rgb_data = rgb565_le_to_rgb(image_data);
-                    final_rgba_data = convert_rgb_to_rgba(rgb_data);
+                    var rgb_data = RGB565LEToRGB(image_data);
+                    final_rgba_data = ConvertRGBToRGBA(rgb_data);
                     break;
 
                 case "ETC2_RGBA8":
                     if (verbose) Console.WriteLine("Decoding ETC2 RGBA8...");
-                    final_rgba_data = decode_etc2_rgba8(image_data, width, height, verbose);
+                    final_rgba_data = DecodeETC2ToRGBA(image_data, width, height, verbose);
                     has_alpha = true;
                     break;
 
@@ -837,7 +837,7 @@ public class SCTParser
                     break;
                 case "L8":
                     if (verbose) Console.WriteLine("Converting L8 to RGBA...");
-                    final_rgba_data = convert_l8_to_rgba(image_data);
+                    final_rgba_data = ConvertL8ToRGBA(image_data);
                     has_alpha = false;
                     break;
                 default:
@@ -898,7 +898,7 @@ public class SCTParser
         }
     }
 
-    private static byte[] convert_rgb_to_rgba(byte[] rgb_data)
+    private static byte[] ConvertRGBToRGBA(byte[] rgb_data)
     {
         var rgba = new byte[rgb_data.Length / 3 * 4];
         for (int i = 0, j = 0; i < rgb_data.Length - 2; i += 3, j += 4)
@@ -911,7 +911,7 @@ public class SCTParser
         return rgba;
     }
 
-    private static byte[] convert_l8_to_rgba(byte[] l8_data)
+    private static byte[] ConvertL8ToRGBA(byte[] l8_data)
     {
         var rgba = new byte[l8_data.Length * 4];
         for (int i = 0; i < l8_data.Length; i++)

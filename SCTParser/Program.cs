@@ -147,7 +147,7 @@ class Program
                 Console.WriteLine($"Processing: {inputFile}");
 
             byte[] data = File.ReadAllBytes(inputFile);
-            byte[]? pngData = SCTParser.convert_to_png(data, verbose);
+            byte[]? pngData = SCTParser.ConvertToPNG(data, verbose);
 
             if (pngData != null)
             {
