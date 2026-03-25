@@ -1,4 +1,3 @@
-using System;
 using Texture2DDecoder;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -59,11 +58,73 @@ namespace SCTParser;
 /// 102 = L8 (Luminance)
 /// 
 /// </summary>
+#nullable disable
 public class SCTParser
 {
     public static int SCT2_SIGNATURE = 0x32544353; // 844383059 = "SCT2" in little endian
     private const int SCT_SIGNATURE_WORD = 0x4353;  // 17235 = "SC" in little endian
     private const byte SCT_SIGNATURE_BYTE = 0x54;   // 84 = "T"
+
+    private abstract class File {
+        public byte[] ImageData = Array.Empty<byte>();
+        public string PixelFormatName = string.Empty;
+        public int Channels;
+        public string FormatType = string.Empty;
+
+        public abstract int Width { get; }
+        public abstract int Height { get; }
+        public abstract int PixelFormatCode { get; }
+        public virtual bool HasAlpha => Channels == 4;
+    }
+
+    private class SCTFile : File
+    {
+        public SCTHeader Header;
+
+        public override int Width => Header.Width;
+        public override int Height => Header.Height;
+        public override int PixelFormatCode => Header.PixelFormat;
+    }
+    private struct SCTHeader
+    {
+        public byte[] Signature;
+        public byte Unknown;
+        public byte PixelFormat;
+        public ushort Width;
+        public ushort Height;
+        public int DataOffset => 9;
+        public bool Compressed => true;
+        public ushort TextureWidth => Width;
+        public ushort TextureHeight => Height;
+    }
+
+    private class SCT2File : File
+    {
+        public SCT2Header Header;
+        public override int Width => Header.Width;
+        public override int Height => Header.Height;
+        public override int PixelFormatCode => Header.PixelFormat;
+        public override bool HasAlpha => Header.HasAlpha || base.HasAlpha;
+    }
+    private struct SCT2Header
+    {
+        public int Signature;
+        public int TotalSize;
+        public int Unknown1;
+        public int DataOffset;
+        public int Unknown2;
+        public int PixelFormat;
+        public ushort Width;
+        public ushort Height;
+        public ushort TextureWidth;
+        public ushort TextureHeight;
+        public int Flags;
+        public bool HasAlpha => (Flags & 0x01) != 0;
+        public bool CropFlag => (Flags & 0x02) != 0;
+        public bool RawData => (Flags & 0x10) != 0;
+        public bool MipmapFlag2 => (Flags & 0x20) != 0;
+        public bool Compressed => (Flags & 0x80000000) != 0;
+    }
 
     /// <summary>
     /// Detect the format of the given byte array.
@@ -113,43 +174,32 @@ public class SCTParser
     /// <param name="data">array of bytes containing the SCT header</param>
     /// <returns>A Dictionary object containing the header parameters</returns>
     /// <exception cref="ArgumentException">Thrown if the file is too small</exception>
-    public static Dictionary<string, object> ParseSCTHeader(byte[] data)
+    private static SCTHeader ParseSCTHeader(byte[] data)
     {
         if (data.Length < 9)
             throw new ArgumentException("File too small to contain a valid SCT header");
 
-        var header = new Dictionary<string, object>();
+        var header = new SCTHeader();
 
         // Offset 0-2: Signature "SCT" (already verified by DetectFormat)
-        header["signature"] = data.Take(3).ToArray();
+        header.Signature = data.Take(3).ToArray();
 
         // Offset 3: Padding/Unknown (not used by game)
-        header["unknown"] = data[3];
+        header.Unknown= data[3];
 
         // Offset 4: Pixel format (1 byte)
         // Game reads this and uses it in format conversion logic
-        header["pixel_format"] = data[4];
+        header.PixelFormat = data[4];
 
         // Offset 5-6: Image width (2 bytes, little endian)
-        header["width"] = BitConverter.ToUInt16(data, 5);
+        header.Width = BitConverter.ToUInt16(data, 5);
 
         // Offset 7-8: Image height (2 bytes, little endian)
-        header["height"] = BitConverter.ToUInt16(data, 7);
+        header.Height = BitConverter.ToUInt16(data, 7);
 
         // compressed data starts at offset 9
-        header["data_offset"] = 9;
-        header["compressed"] = true;  // SCT format always uses LZ4 compression
-
-        // For SCT, texture dimensions equal image dimensions (no padding)
-        header["texture_width"] = header["width"];
-        header["texture_height"] = header["height"];
-
-        // SCT has no explicit flags byte in the header
-        header["flags"] = 0;
-        header["has_alpha"] = false;
-        header["crop_flag"] = false;
-        header["mipmap_flag1"] = false;
-        header["mipmap_flag2"] = false;
+        //header.DataOffset = 9;
+        //header.Compressed = true;
 
         return header;
     }
@@ -160,54 +210,47 @@ public class SCTParser
     /// <param name="data">Array of bytes containing the SCT2 header</param>
     /// <returns>A Dictionary object containing the header parameters</returns>
     /// <exception cref="ArgumentException">Thrown if the file is too small</exception>
-    public static Dictionary<string, object> ParseSCT2Header(byte[] data)
+    private static SCT2Header ParseSCT2Header(byte[] data)
     {
         if (data.Length < 34)
             throw new ArgumentException("File too small to contain a valid SCT2 header");
 
-        var header = new Dictionary<string, object>();
+        var header = new SCT2Header();
 
-        // Offset 0: Signature (already verified)
-        header["signature"] = BitConverter.ToInt32(data, 0);
+        // Offset 0: Signature
+        header.Signature = BitConverter.ToInt32(data, 0);
 
         // Offset 4: Total data size
-        header["total_size"] = BitConverter.ToInt32(data, 4);
+        header.TotalSize = BitConverter.ToInt32(data, 4);
 
         // Offset 8: Unknown (possibly padding)
-        header["unknown1"] = BitConverter.ToInt32(data, 8);
+        header.Unknown1 = BitConverter.ToInt32(data, 8);
 
         // Offset 12: Image data offset
-        header["data_offset"] = BitConverter.ToInt32(data, 12);
+        header.DataOffset = BitConverter.ToInt32(data, 12);
 
         // Offset 16: Unknown
-        header["unknown2"] = BitConverter.ToInt32(data, 16);
+        header.Unknown2 = BitConverter.ToInt32(data, 16);
 
         // Offset 20: Pixel format (4 bytes)
         // The game reads this as 4-byte integer, then compares with format constants
-        header["pixel_format"] = BitConverter.ToInt32(data, 20);
+        header.PixelFormat = BitConverter.ToInt32(data, 20);
 
         // Offset 24-25: Width (2 bytes)
-        header["width"] = BitConverter.ToUInt16(data, 24);
+        header.Width = BitConverter.ToUInt16(data, 24);
 
         // Offset 26-27: Height (2 bytes)
-        header["height"] = BitConverter.ToUInt16(data, 26);
+        header.Height = BitConverter.ToUInt16(data, 26);
 
         // Offset 28-29: Texture width (2 bytes)
-        header["texture_width"] = BitConverter.ToUInt16(data, 28);
+        header.TextureWidth = BitConverter.ToUInt16(data, 28);
 
         // Offset 30-31: Texture height (2 bytes)
-        header["texture_height"] = BitConverter.ToUInt16(data, 30);
+        header.TextureHeight = BitConverter.ToUInt16(data, 30);
 
         // Offset 32-35: Flags (4 bytes - int32)
         // flags are read as 4-byte integer
-        header["flags"] = BitConverter.ToInt32(data, 32);
-
-        int flags = (int)header["flags"];
-        header["has_alpha"] = (flags & 0x01) != 0;        // Bit 0
-        header["crop_flag"] = (flags & 0x02) != 0;        // Bit 1
-        header["raw_data"] = (flags & 0x10) != 0;         // Bit 4: raw/uncompressed data hint
-        header["mipmap_flag2"] = (flags & 0x20) != 0;     // Bit 5: mipmap flag
-        header["compressed"] = (flags & 0x80000000) != 0; // Bit 31 (sign bit): LZ4 compressed
+        header.Flags = BitConverter.ToInt32(data, 32);
 
         return header;
     }
@@ -220,6 +263,7 @@ public class SCTParser
     /// <param name="header">Header dictionary to validate</param>
     /// <param name="verbose">Enable validation messages</param>
     /// <returns>True if header appears valid, false otherwise</returns>
+    [Obsolete("This method is not currently used, but may be helpful for future debugging of SCT2 files with unexpected header values.")]
     public static bool ValidateHeader(Dictionary<string, object> header, bool verbose = false)
     {
         // Check width and height are reasonable
@@ -255,7 +299,7 @@ public class SCTParser
     /// <param name="compressed_data">Compressed data array</param>
     /// <returns>Decompressed data as byte array</returns>
     /// <exception cref="ArgumentException">Thrown if compressed data is too short</exception>
-    public static byte[] LZ4Decompress(byte[] compressed_data)
+    private static byte[] LZ4Decompress(byte[] compressed_data)
     {
         if (compressed_data.Length < 8)
             throw new ArgumentException("Compressed data too short");
@@ -368,7 +412,7 @@ public class SCTParser
     /// <param name="pixel_format">Pixel format code</param>
     /// <param name="verbose">Enable detailed output</param>
     /// <returns>True if data should be decompressed, false otherwise</returns>
-    public static bool ShouldDecompressIntelligently(byte[] image_data, int width, int height, int pixel_format, bool verbose = false)
+    private static bool ShouldDecompressIntelligently(byte[] image_data, int width, int height, int pixel_format, bool verbose = false)
     {
         if (image_data.Length < 8)
             return false;
@@ -438,7 +482,7 @@ public class SCTParser
     /// </summary>
     /// <param name="data">Array of bytes in RGB565 LE format</param>
     /// <returns>Array of bytes in RGB format</returns>
-    public static byte[] RGB565LEToRGB(byte[] data)
+    private static byte[] RGB565LEToRGB(byte[] data)
     {
         List<byte> rgb_data = new List<byte>();
 
@@ -472,7 +516,7 @@ public class SCTParser
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>Decoded RGBA data</returns>
     /// <exception cref="Exception">Thrown when decoding fails</exception>
-    public static byte[] DecodeETC2ToRGBA(byte[] compressed_data, int width, int height, bool verbose = false)
+    private static byte[] DecodeETC2ToRGBA(byte[] compressed_data, int width, int height, bool verbose = false)
     {
         // Try texture2ddecoder first
         try
@@ -622,7 +666,7 @@ public class SCTParser
     /// </summary>
     /// <param name="format_code">Format code from header</param>
     /// <returns>Tuple containing format name, number of channels, and format type</returns>
-    public static (string Format, int Channels, string Type) GetPixelFormatInfo(int format_code)
+    private static (string Format, int Channels, string Type) GetPixelFormatInfo(int format_code)
     {
         // Define format mapping dictionary
         var format_map = new Dictionary<int, (string Format, int Channels, string Type)>
@@ -663,7 +707,7 @@ public class SCTParser
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>Dictionary containing parsed header and image data</returns>
     /// <exception cref="ArgumentException">Thrown if file format is invalid</exception>
-    public static Dictionary<string, object> ParseSCTFile(byte[] data, bool verbose = false)
+    private static SCTFile ParseSCTFile(byte[] data, bool verbose = false)
     {
         // Verify format
         int format_type = DetectFormat(data, verbose);
@@ -671,18 +715,19 @@ public class SCTParser
             throw new ArgumentException($"File is not a valid SCT format (detected format: {format_type})");
 
         // Parse header
-        var header = ParseSCTHeader(data);
+        SCTFile file = new SCTFile();
+        file.Header = ParseSCTHeader(data);
 
         if (verbose)
         {
             Console.WriteLine("SCT Header:");
-            Console.WriteLine($"  Dimensions: {header["width"]}x{header["height"]}");
-            Console.WriteLine($"  Pixel format: {header["pixel_format"]}");
-            Console.WriteLine($"  Compressed: {header["compressed"]}");
+            Console.WriteLine($"  Dimensions: {file.Header.Width}x{file.Header.Height}");
+            Console.WriteLine($"  Pixel format: {file.Header.PixelFormat}");
+            Console.WriteLine($"  Compressed: {file.Header.Compressed}");
         }
 
         // Extract image data
-        int image_data_start = Convert.ToInt32(header["data_offset"]);
+        int image_data_start = Convert.ToInt32(file.Header.DataOffset);
         byte[] image_data = new byte[data.Length - image_data_start];
         Array.Copy(data, image_data_start, image_data, 0, data.Length - image_data_start);
 
@@ -699,18 +744,9 @@ public class SCTParser
             throw;
         }
 
-        // Determine pixel format
-        var (pixel_format_name, channels, format_type_str) = GetPixelFormatInfo(Convert.ToInt32(header["pixel_format"]));
-
-        // Return all parsed data
-        return new Dictionary<string, object>
-        {
-            { "header", header },
-            { "image_data", image_data },
-            { "pixel_format", pixel_format_name },
-            { "channels", channels },
-            { "format_type", format_type_str }
-        };
+        file.ImageData = image_data;
+        (file.PixelFormatName, file.Channels, file.FormatType) = GetPixelFormatInfo(Convert.ToInt32(file.Header.PixelFormat));
+        return file;
     }
 
     /// <summary>
@@ -720,7 +756,7 @@ public class SCTParser
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>Dictionary containing parsed header and image data</returns>
     /// <exception cref="ArgumentException">Thrown if file format is invalid</exception>
-    private static Dictionary<string, object> ParseSCT2File(byte[] data, bool verbose = false)
+    private static SCT2File ParseSCT2File(byte[] data, bool verbose = false)
     {
         // Verify format
         //int format_type = detect_format(data, verbose);
@@ -728,21 +764,22 @@ public class SCTParser
         //throw new ArgumentException($"File is not a valid SCT2 format (detected format: {format_type})");
 
         // Parse header
-        var header = ParseSCT2Header(data);
+        SCT2File file = new SCT2File();
+        file.Header = ParseSCT2Header(data);
 
         if (verbose)
         {
             Console.WriteLine("SCT2 Header:");
-            Console.WriteLine($"  Dimensions: {header["width"]}x{header["height"]}");
-            Console.WriteLine($"  Pixel format: {header["pixel_format"]}");
-            Console.WriteLine($"  Flags: 0x{header["flags"]:X2}");
-            Console.WriteLine($"  Compressed: {header["compressed"]}");
-            Console.WriteLine($"  Has alpha: {header["has_alpha"]}");
-            Console.WriteLine($"  Raw data: {header["raw_data"]}");
+            Console.WriteLine($"  Dimensions: {file.Header.Width}x{file.Header.Height}");
+            Console.WriteLine($"  Pixel format: {file.Header.PixelFormat}");
+            Console.WriteLine($"  Flags: 0x{file.Header.Flags:X2}");
+            Console.WriteLine($"  Compressed: {file.Header.Compressed}");
+            Console.WriteLine($"  Has alpha: {file.Header.HasAlpha}");
+            Console.WriteLine($"  Raw data: {file.Header.RawData}");
         }
 
         // Extract image data
-        int image_data_start = Convert.ToInt32(header["data_offset"]);
+        int image_data_start = Convert.ToInt32(file.Header.DataOffset);
         byte[] image_data = new byte[data.Length - image_data_start];
         Array.Copy(data, image_data_start, image_data, 0, data.Length - image_data_start);
 
@@ -751,17 +788,17 @@ public class SCTParser
 
         // If raw_data flag (0x10) or has_alpha flag (0x01) is set, use intelligent detection
         // The game tests bit 4 to decide decompression strategy
-        if ((bool)header["raw_data"] || (bool)header["has_alpha"])
+        if (file.Header.RawData || file.Header.HasAlpha)
         {
-            string flag_name = (bool)header["raw_data"] ? "raw_data (0x10)" : "has_alpha (0x01)";
+            string flag_name = file.Header.RawData ? "raw_data (0x10)" : "has_alpha (0x01)";
             if (verbose)
                 Console.WriteLine($"Flag {flag_name} detected: {image_data.Length} bytes");
 
             if (ShouldDecompressIntelligently(
                 image_data,
-                Convert.ToInt32(header["width"]),
-                Convert.ToInt32(header["height"]),
-                Convert.ToInt32(header["pixel_format"]),
+                Convert.ToInt32(file.Header.Width),
+                Convert.ToInt32(file.Header.Height),
+                Convert.ToInt32(file.Header.PixelFormat),
                 verbose))
             {
                 try
@@ -785,7 +822,7 @@ public class SCTParser
             }
         }
         // Otherwise, attempt decompression if compressed flag (bit 31) is set
-        else if (image_data.Length >= 8 && Convert.ToBoolean(header["compressed"]))
+        else if (image_data.Length >= 8 && file.Header.Compressed)
         {
             try
             {
@@ -825,18 +862,9 @@ public class SCTParser
             decompressed_image_data = image_data;
         }
 
-        // Determine pixel format
-        var (pixel_format_name, channels, format_type_str) = GetPixelFormatInfo(Convert.ToInt32(header["pixel_format"]));
-
-        // Return all parsed data
-        return new Dictionary<string, object>
-        {
-            { "header", header },
-            { "image_data", decompressed_image_data },
-            { "pixel_format", pixel_format_name },
-            { "channels", channels },
-            { "format_type", format_type_str }
-        };
+        file.ImageData = decompressed_image_data;
+        (file.PixelFormatName, file.Channels, file.FormatType) = GetPixelFormatInfo(Convert.ToInt32(file.Header.PixelFormat));
+        return file;
     }
 
 
@@ -846,19 +874,18 @@ public class SCTParser
     /// <param name="data">Raw byte array of the SCT/SCT2 file</param>
     /// <param name="verbose">Enable detailed output messages</param>
     /// <returns>PNG image data as byte array, or null if conversion fails</returns>
-    public static byte[]? ConvertToPNG(byte[] data, bool verbose = false)
+    public static byte[] ConvertToPNG(byte[] data, bool verbose = false)
     {
         try
         {
-            // Determine file type
             int format_type = DetectFormat(data);
-            Dictionary<string, object>? result = null;
+            File result;
 
-            if (format_type == 10002)  // SCT2
+            if (format_type == 10002)
             {
                 result = ParseSCT2File(data, verbose);
             }
-            else if (format_type == 10001)  // SCT
+            else if (format_type == 10001)
             {
                 result = ParseSCTFile(data, verbose);
             }
@@ -870,64 +897,62 @@ public class SCTParser
 
             if (result == null) return null;
 
-            var header = (Dictionary<string, object>)result["header"];
-            byte[] image_data = (byte[])result["image_data"];
-            string format_type_str = (string)result["format_type"];
-            int width, height;
-
-            width = Convert.ToInt32(header["width"]);
-            height = Convert.ToInt32(header["height"]);
+            int width = result.Width;
+            int height = result.Height;
+            byte[] image_data = result.ImageData;
 
             byte[] final_rgba_data;
-            bool has_alpha = false;
 
-            switch (format_type_str)
+            switch (result.FormatType)
             {
                 case "RGB565_LE":
                     if (verbose) Console.WriteLine("Decoding RGB565 Little Endian...");
-                    var rgb_data = RGB565LEToRGB(image_data);
-                    final_rgba_data = ConvertRGBToRGBA(rgb_data);
+                    final_rgba_data = ConvertRGBToRGBA(RGB565LEToRGB(image_data));
                     break;
 
                 case "ETC2_RGBA8":
                     if (verbose) Console.WriteLine("Decoding ETC2 RGBA8...");
                     final_rgba_data = DecodeETC2ToRGBA(image_data, width, height, verbose);
-                    has_alpha = true;
                     break;
 
                 case "ASTC_4x4":
                     if (verbose) Console.WriteLine("Decoding ASTC 4x4...");
-                    final_rgba_data = new byte[width * height * 4];
-                    TextureDecoder.DecodeASTC(image_data, width, height, 4, 4, final_rgba_data);
-                    BGRA_SwapRB(final_rgba_data);
-                    has_alpha = true;
+                    final_rgba_data = DecodeAstcToRgba(image_data, width, height, 4, 4);
                     break;
 
                 case "ASTC_6x6":
                     if (verbose) Console.WriteLine("Decoding ASTC 6x6...");
-                    final_rgba_data = new byte[width * height * 4];
-                    TextureDecoder.DecodeASTC(image_data, width, height, 6, 6, final_rgba_data);
-                    BGRA_SwapRB(final_rgba_data);
-                    has_alpha = true;
+                    final_rgba_data = DecodeAstcToRgba(image_data, width, height, 6, 6);
                     break;
 
                 case "ASTC_8x8":
                     if (verbose) Console.WriteLine("Decoding ASTC 8x8...");
-                    final_rgba_data = new byte[width * height * 4];
-                    TextureDecoder.DecodeASTC(image_data, width, height, 8, 8, final_rgba_data);
-                    BGRA_SwapRB(final_rgba_data);
-                    has_alpha = true;
+                    final_rgba_data = DecodeAstcToRgba(image_data, width, height, 8, 8);
                     break;
+
                 case "L8":
                     if (verbose) Console.WriteLine("Converting L8 to RGBA...");
                     final_rgba_data = ConvertL8ToRGBA(image_data);
-                    has_alpha = false;
                     break;
-                default:
-                    if (verbose) Console.WriteLine($"Using raw {format_type_str} data");
+
+                case "RGB":
+                    if (verbose) Console.WriteLine("Converting RGB to RGBA...");
+                    final_rgba_data = ConvertRGBToRGBA(image_data);
+                    break;
+
+                case "RGBA":
                     final_rgba_data = image_data;
-                    has_alpha = format_type_str.Contains("RGBA") ||
-                               (header.ContainsKey("has_alpha") && Convert.ToBoolean(header["has_alpha"]));
+                    break;
+
+                default:
+                    if (verbose) Console.WriteLine($"Using fallback conversion for type {result.FormatType}");
+                    final_rgba_data = result.Channels switch
+                    {
+                        4 => image_data,
+                        3 => ConvertRGBToRGBA(image_data),
+                        1 => ConvertL8ToRGBA(image_data),
+                        _ => image_data
+                    };
                     break;
             }
 
@@ -937,31 +962,21 @@ public class SCTParser
                 return null;
             }
 
-            // Convert to ImageSharp format and save as PNG
             using (var image = new Image<Rgba32>(width, height))
             {
                 for (int y = 0; y < height; y++)
                 {
                     for (int x = 0; x < width; x++)
                     {
-                        int i = y * width + x;
-                        int j = i * (has_alpha ? 4 : 3);
-
-                        if (j < final_rgba_data.Length - (has_alpha ? 3 : 2))
+                        int pixelIndex = (y * width + x) * 4;
+                        if (pixelIndex + 3 < final_rgba_data.Length)
                         {
-                            image[x, y] = has_alpha
-                                ? new Rgba32(
-                                    final_rgba_data[j],     // R
-                                    final_rgba_data[j + 1], // G
-                                    final_rgba_data[j + 2], // B
-                                    final_rgba_data[j + 3]  // A
-                                )
-                                : new Rgba32(
-                                    final_rgba_data[j],     // R
-                                    final_rgba_data[j + 1], // G
-                                    final_rgba_data[j + 2], // B
-                                    255                     // A (opaque)
-                                );
+                            image[x, y] = new Rgba32(
+                                final_rgba_data[pixelIndex],
+                                final_rgba_data[pixelIndex + 1],
+                                final_rgba_data[pixelIndex + 2],
+                                final_rgba_data[pixelIndex + 3]
+                            );
                         }
                     }
                 }
@@ -978,6 +993,14 @@ public class SCTParser
             if (verbose) Console.WriteLine($"Error during conversion: {e.Message}");
             return null;
         }
+    }
+
+    private static byte[] DecodeAstcToRgba(byte[] imageData, int width, int height, int blockWidth, int blockHeight)
+    {
+        var rgba = new byte[width * height * 4];
+        TextureDecoder.DecodeASTC(imageData, width, height, blockWidth, blockHeight, rgba);
+        BGRA_SwapRB(rgba);
+        return rgba;
     }
 
     private static byte[] ConvertRGBToRGBA(byte[] rgb_data)
