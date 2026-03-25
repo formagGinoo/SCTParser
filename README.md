@@ -7,7 +7,7 @@
 
 This is a small program that is able to **parse** the custom images format (**.sct**) used in games made with **Yuna Engine (SuperCreative engine)** like *Chaos Zero Nightmare (tested)* and *Epic Seven (not tested)*.
 
-The program supports both **SCT** and **SCT2** versions of the format, with implementation based on reverse engineering analysis using IDA Pro.
+The program supports both **SCT** and **SCT2** versions of the format, which implementation is based on reverse engineering analysis using IDA Pro.
 
 ## Notes
 - it was a fun reverse/research project
